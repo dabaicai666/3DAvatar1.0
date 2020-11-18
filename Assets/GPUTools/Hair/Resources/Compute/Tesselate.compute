@@ -1,0 +1,137 @@
+﻿#include "..//..//..//Common/Resources/Compute/Platforms.cginc"
+
+#pragma kernel CSTesselate
+
+struct Particle
+{
+	float3 position;
+	float3 lastPosition;
+	float radius;
+};
+
+struct RenderParticle
+{
+    float3 color;
+    float interpolation;
+    float wavinessScale;
+    float wavinessFrequency;
+};
+
+struct TessRenderParticle
+{
+	float3 position; 
+	float3 tangent;
+    float3 color;
+    float interpolation;
+};
+
+RWStructuredBuffer<Particle> particles;
+RWStructuredBuffer<RenderParticle> renderParticles;
+RWStructuredBuffer<TessRenderParticle> tessRenderParticles;
+
+uint segments;
+uint tessSegments;
+float3 wavinessAxis;
+
+float3 GetBezierPoint(float3 p0, float3 p1, float3 p2, float t)
+{
+	float invT = 1 - t;
+	return invT*invT*p0 + 2 * invT*t*p1 + t*t*p2;
+}
+
+float3 GetSplinePoint(int x, float t, uint sizeY)
+{
+	int sizeYm1 = sizeY - 1;
+	int y = (uint)(t*sizeY);
+	half tStep = 1.0f / sizeY;
+	half localT = (t % tStep) * sizeY;
+
+	int startI = x*sizeY;
+
+	int y0 = max(0, y - 1);
+	int y1 = min(y, sizeYm1);
+	int y2 = min(y + 1, sizeYm1);
+
+	float3 p0 = particles[startI + y0].position;
+	float3 p1 = particles[startI + y1].position;
+	float3 p2 = particles[startI + y2].position;
+
+	float3 cPoint1 = (p0 + p1)*0.5f;
+	float3 cPoint2 = (p1 + p2)*0.5f;
+
+	return GetBezierPoint(cPoint1, p1, cPoint2, localT);
+}
+
+RenderParticle GetSplineBodyData(int x, half t, uint sizeY)//refactor copy/paste
+{
+	int sizeYm1 = sizeY - 1;
+	int y = (int)(t*sizeY);
+	half tStep = 1.0f / sizeY;
+	half localT = (t % tStep) * sizeY;
+
+	int startI = x*sizeY;
+
+	int y1 = min(y, sizeYm1);
+	int y2 = min(y + 1, sizeYm1);
+
+	RenderParticle b1 = renderParticles[startI + y1];
+	RenderParticle b2 = renderParticles[startI + y2];
+
+	RenderParticle b;
+	b.color = lerp(b1.color, b2.color, localT);
+	b.interpolation = lerp(b1.interpolation, b2.interpolation, localT);
+	b.wavinessScale = lerp(b1.wavinessScale, b2.wavinessScale, localT);
+	b.wavinessFrequency = lerp(b1.wavinessFrequency, b2.wavinessFrequency, localT);
+
+	return b;
+}
+
+half3 CurveDirrection(half3 axis, half2 uv, half amplitude, half frequency)
+{
+	half angle = uv.x*frequency + uv.y;
+
+	half c = cos(angle);
+	half s = sin(angle);
+
+	half3 vecX = half3(0, c, s);
+	half3 vecY = half3(c, 0, s);
+	half3 vecZ = half3(c, s, 0);
+
+	half3 vec = normalize(vecX*axis.x + vecY*axis.y + vecZ*axis.z);
+
+	return vec*amplitude;  
+}
+
+[numthreads(THREADS,1,1)]
+void CSTesselate (uint3 id : SV_DispatchThreadID)
+{
+	uint y = id.x % tessSegments;
+	uint x = id.x / tessSegments;
+
+	float t = y / (float)tessSegments;
+	float tessStep = 1.0/tessSegments;
+
+    float3 tessPosition =  GetSplinePoint(x, saturate(t), segments);
+    //float3 tessPosition0 =  particles[x*segments].position;
+    //float3 tessPosition1 =  particles[x*segments + segments - 1].position;
+	//float3 tessBinormal = normalize(tessPosition1 - tessPosition0);
+    //float3 tessTangent = cross(tessBinormal, wavinessAxis);
+	//float3 axis = cross()
+
+	RenderParticle renderParticle = GetSplineBodyData(x, saturate(t), segments);
+	
+	float3 curve = CurveDirrection(normalize(wavinessAxis), half2(t, x), renderParticle.wavinessScale, renderParticle.wavinessFrequency);
+
+	TessRenderParticle tessParticle;
+
+	tessParticle.position = tessPosition + curve;
+	tessParticle.tangent = float3(0,0,0);
+	tessParticle.color = renderParticle.color;
+	tessParticle.interpolation = renderParticle.interpolation;
+	tessRenderParticles[id.x] = tessParticle;
+
+	AllMemoryBarrierWithGroupSync();
+
+	int sign = y == 0 ? -1 : 1;
+	tessRenderParticles[id.x].tangent = normalize(tessParticle.position - tessRenderParticles[id.x - sign].position)*sign;
+}

@@ -1,0 +1,138 @@
+using System;  
+using UnityEngine;  
+using System.Collections;  
+using System.Collections.Generic;  
+using System.Windows.Forms;  
+using System.IO;  
+  
+public class FileMenu : MonoBehaviour  
+{  
+    #region Public  
+    public UIButton BtnNew;  
+    public UIButton BtnOpen;  
+    public UIButton BtnSave;  
+    public UIButton BtnSaveAs;  
+    public UIButton BtnClose;  
+    #endregion  
+ 
+    #region private  
+      
+    SaveFileDialog saveLog;  
+    StreamReader sr;  
+    StreamWriter sw;  
+    string strSendTxt;  
+    UIPaneAuto uiPanelAuto;//一个显示文本和输入文本的文本框所在的类  
+    #endregion  
+  
+    void Awake()  
+    {  
+        uiPanelAuto = transform.GetComponent<UIPaneAuto>();  
+        BtnNew = GameObject.Find("UI Root/Camera/PanelTop/LstBtn/BtnNew").GetComponent<UIButton>();  
+        BtnOpen = GameObject.Find("UI Root/Camera/PanelTop/LstBtn/BtnOpen").GetComponent<UIButton>();  
+        BtnSave = GameObject.Find("UI Root/Camera/PanelTop/LstBtn/BtnSave").GetComponent<UIButton>();  
+        BtnSaveAs = GameObject.Find("UI Root/Camera/PanelTop/LstBtn/BtnSaveAs").GetComponent<UIButton>();  
+        BtnClose = GameObject.Find("UI Root/Camera/PanelTop/LstBtn/BtnClose").GetComponent<UIButton>();  
+        EventDelegate.Add(BtnNew.onClick, fnNew);  
+        EventDelegate.Add(BtnOpen.onClick, fnOpen);  
+        EventDelegate.Add(BtnSave.onClick, fnSave);  
+        EventDelegate.Add(BtnSaveAs.onClick, fnSave);  
+        EventDelegate.Add(BtnClose.onClick, fnClose);  
+    }  
+  
+      
+  
+    void fnNew()  
+    {  
+        Debug.Log("New");  
+        uiPanelAuto.fnSetInputTxt("");  
+    }  
+  
+    void fnOpen()  
+    {  
+        Debug.Log("Open");  
+        try  
+        {  
+            OpenFileDialog opLog = new OpenFileDialog();  
+            opLog.InitialDirectory = UnityEngine.Application.dataPath;  
+            opLog.Filter = "txt files (*.txt)|*.txt|All files (*.*)|*.*";  
+            DialogResult result = opLog.ShowDialog();  
+            if (result == DialogResult.OK)  
+            {  
+                string path = opLog.FileName;  
+                Debug.Log(path);  
+                sr = File.OpenText(path);  
+  
+                string line;  
+                BetterList<string> lst = new BetterList<string>();  
+                strSendTxt = "";  
+                while ((line = sr.ReadLine()) != null)  
+                {  
+                    lst.Add(line);  
+                }  
+                foreach (string s in lst)  
+                {  
+                    strSendTxt += s+"\n";  
+                }  
+                uiPanelAuto.fnSetInputTxt(strSendTxt);  
+                sr.Close();  
+                sr.Dispose();  
+            }  
+        }  
+        catch(Exception e)  
+        {  
+            Debug.Log("打开错误："+e.Message);  
+            return;  
+        }  
+    }  
+  
+    void fnSave()  
+    {  
+            Debug.Log("Save");  
+            SaveFileDialog saveLog = new SaveFileDialog();  
+            saveLog.InitialDirectory = UnityEngine.Application.dataPath;  
+            saveLog.Filter = "txt files (*.txt)|*.txt|All files (*.*)|*.*";  
+            DialogResult result = saveLog.ShowDialog();  
+            if (result == DialogResult.OK)  
+            {  
+                Debug.Log(saveLog.FileName);  
+                FileInfo f = new FileInfo(saveLog.FileName);  
+                if (f.Exists)  
+                {  
+                    f.Delete();//如果存在同名文本，就删除它重新建一个  
+                    f = new FileInfo(saveLog.FileName);  
+                    sw = f.AppendText();  
+[csharp] view plain copy
+            //将LstIptChect中的数据添加到Txt中  
+                    foreach (string s in uiPanelAuto.lstIptCheck)  
+                    {  
+                        Debug.Log(s);  
+                        sw.WriteLine(s);  
+                    }  
+                    sw.Close();  
+                    sw.Dispose();  
+                }  
+                else  
+                {  
+                    sw = f.AppendText();  
+                     foreach (string s in uiPanelAuto.lstIptCheck)  
+                    {  
+                        Debug.Log(s);  
+                        if(s!="")  
+                        sw.WriteLine(s);  
+                    }  
+                    sw.Close();  
+                    sw.Dispose();  
+                }  
+            }  
+        }  
+    }  
+  
+    void fnClose()  
+    {  
+        Application.Quit();  
+    }  
+}  
+[csharp] view plain copy
+  
+[csharp] view plain copy
+</pre><pre class="csharp" name="code"></pre><pre class="csharp" name="code">  
